@@ -24,7 +24,7 @@ npm run build
 
 `dist/ClaudeLimits.exe` üretilir. Bu dosya Node'un [Single Executable Application](https://nodejs.org/api/single-executable-applications.html) özelliğiyle tek bir taşınabilir çalıştırılabilir dosyaya paketlenir; `index.html` de içine gömülüdür, ek dosyaya ihtiyaç duymaz.
 
-Çift tıklandığında yerel sunucuyu başlatır ve Chrome (yoksa Edge) varsa adres çubuğu/sekmeler olmadan bağımsız bir uygulama penceresi (`--app` modu) açar; hiçbiri yoksa varsayılan tarayıcıda normal bir sekme açılır.
+Çift tıklandığında yerel sunucuyu başlatır ve Chrome (yoksa Edge) varsa adres çubuğu/sekmeler olmadan bağımsız bir uygulama penceresi (`--app` modu) açar; hiçbiri yoksa varsayılan tarayıcıda normal bir sekme açılır. Konsol penceresi açılmaz (build sırasında exe'nin PE subsystem'i GUI olarak işaretlenir) ve uygulama penceresi kapatıldığında arka plandaki sunucu süreci de otomatik sonlanır.
 
 > İmzasız bir derleme olduğu için Windows SmartScreen ilk açılışta uyarı gösterebilir.
 
