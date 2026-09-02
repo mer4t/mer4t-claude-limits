@@ -36,12 +36,6 @@ Claude Code ile aynı uç noktayı (`api.anthropic.com/api/oauth/usage`) makinen
 | 📦 **Tek dosya, taşınabilir** | Node'un Single Executable Application özelliğiyle tek bir `.exe`; kurulum, ek bağımlılık veya yönetici izni gerekmez |
 | 🔒 **Gizlilik** | Hiçbir üçüncü taraf servise veri gitmez; tek ağ isteği doğrudan `api.anthropic.com`'a |
 
-## 📸 Ekran Görüntüsü
-
-<div align="center">
-<img src="screenshots/panel.jpg" alt="Claude Limits paneli - güncel oturum ve haftalık limitler" width="560">
-</div>
-
 ## 🚀 Kurulum
 
 1. [Releases](https://github.com/mer4t/mer4t-claude-limits/releases/latest) sayfasından `ClaudeLimits.exe` dosyasını indirin.
