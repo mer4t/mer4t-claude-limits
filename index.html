@@ -318,25 +318,36 @@ function tickCountdowns(){
   document.getElementById('clock').textContent = now.toLocaleTimeString('tr-TR');
 }
 
+const MAX_BACKOFF_MS = 5 * 60000;
+let backoffMs = POLL_MS;
+let pollTimer = null;
+
 async function poll(){
   try {
     const res = await fetch('/api/usage', { cache: 'no-store' });
     const json = await res.json();
     if (!res.ok){
       latest = { ...(latest || {}), error: json.error || ('HTTP ' + res.status) };
+      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     } else {
       latest = { limits: normalize(json), fetchedAt: json.fetchedAt, subscriptionType: json.subscriptionType, rateLimitTier: json.rateLimitTier, error: null };
+      backoffMs = POLL_MS;
     }
   } catch (e) {
     latest = { ...(latest || {}), error: 'Yerel sunucuya ulaşılamadı: ' + e.message };
+    backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
   }
   render();
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, backoffMs);
 }
 
-document.getElementById('refreshBtn').addEventListener('click', poll);
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  backoffMs = POLL_MS;
+  poll();
+});
 
 poll();
-setInterval(poll, POLL_MS);
 setInterval(tickCountdowns, TICK_MS);
 </script>
 </body>

@@ -40,7 +40,12 @@ async function readOAuth() {
   } catch {
     throw new Error(`Kimlik dosyasi bulunamadi: ${CRED_PATH}. Once Claude Code ile en az bir kez giris yapin.`);
   }
-  const data = JSON.parse(raw);
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(`Kimlik dosyasi okunamadi (bozuk JSON): ${CRED_PATH}`);
+  }
   const oauth = data.claudeAiOauth;
   if (!oauth?.accessToken) {
     throw new Error('Kimlik dosyasinda oturum jetonu yok. Claude Code icinde /login ile giris yapin.');
@@ -59,11 +64,15 @@ async function fetchUsage() {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    const err = new Error(
-      res.status === 401
-        ? 'Oturum jetonunun suresi dolmus gibi gorunuyor. Claude Code uygulamasini bir kez acip kapatin (jeton kendini yeniler), sonra panel otomatik toparlanacak.'
-        : `Anthropic API hatasi (${res.status}): ${text.slice(0, 300)}`
-    );
+    let message;
+    if (res.status === 401) {
+      message = 'Oturum jetonunun suresi dolmus gibi gorunuyor. Claude Code uygulamasini bir kez acip kapatin (jeton kendini yeniler), sonra panel otomatik toparlanacak.';
+    } else if (res.status === 429) {
+      message = 'Anthropic tarafi su an istekleri siniyor (rate limit). Panel otomatik olarak yavaslayip birazdan tekrar deneyecek.';
+    } else {
+      message = `Anthropic API hatasi (${res.status}): ${text.slice(0, 300)}`;
+    }
+    const err = new Error(message);
     err.status = res.status;
     throw err;
   }
@@ -139,13 +148,26 @@ function launchAppWindow(url) {
     [
       `--app=${url}`,
       `--user-data-dir=${profileDir}`,
-      '--window-size=480,680',
+      '--window-size=700,620',
       '--no-first-run',
       '--no-default-browser-check',
     ],
     { detached: true, stdio: 'ignore' }
   ).unref();
 }
+
+server.on('error', (err) => {
+  const url = `http://localhost:${PORT}`;
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} zaten kullanimda - panel muhtemelen zaten calisiyor (${url}).`);
+    if (isSea && process.platform === 'win32') {
+      launchAppWindow(url);
+    }
+    process.exit(0);
+  }
+  console.error('Sunucu baslatilamadi:', err.message);
+  process.exit(1);
+});
 
 server.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
