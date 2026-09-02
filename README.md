@@ -1,34 +1,104 @@
-# m4claudelimits
+<div align="center">
 
-Claude Code kullanım limitlerini (`/usage` komutunun gösterdiği 5 saatlik oturum ve haftalık limitler) canlı olarak takip eden yerel bir panel. Görünüm Claude Code terminaline benzer şekilde tasarlandı; limitlerin yüzde olarak durumunu, ne zaman sıfırlanacağını (hem saat hem geri sayım olarak) sürekli gösterir.
+# ✳️ Claude Limits
 
-## Nasıl çalışır
+**Claude Code kullanım limitlerini (5 saatlik oturum ve haftalık) canlı takip eden yerel panel**
 
-Claude Code'un kendisinin de kullandığı `api.anthropic.com/api/oauth/usage` uç noktasını, makinenizdeki `~/.claude/.credentials.json` içindeki oturum jetonuyla sorgular. Jeton hiçbir zaman tarayıcıya gönderilmez, sadece yerel sunucu sürecinde kalır. Jeton yenileme işlemi burada yapılmaz (Claude Code'un kendi refresh token rotasyonunu bozmamak için); dosya her sorguda yeniden okunur, böylece Claude Code kendi jetonunu yeniledikçe panel de otomatik olarak güncelini kullanır.
+[![Latest Release](https://img.shields.io/github/v/release/mer4t/mer4t-claude-limits?label=latest%20release&color=orange)](https://github.com/mer4t/mer4t-claude-limits/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![SEA](https://img.shields.io/badge/packaging-Node%20SEA-000000)](https://nodejs.org/api/single-executable-applications.html)
 
-Kullanmak için önce Claude Code ile en az bir kez giriş yapmış olmanız gerekir.
+<img src="screenshots/panel.jpg" alt="Claude Limits paneli" width="500">
 
-## Çalıştırma (geliştirme modu)
+</div>
+
+---
+
+## Nedir bu?
+
+Claude Code'un kendi `/usage` komutunun gösterdiği verileri — 5 saatlik oturum limiti ve haftalık limitler (tüm modeller, Opus, Sonnet, bağlı uygulamalar) — sürekli açık kalan küçük bir masaüstü penceresinde canlı gösteren yerel bir panel. Terminale benzer koyu bir tema kullanır; her limitin yüzde durumunu, ne zaman sıfırlanacağını (hem saat hem canlı geri sayım olarak) gösterir.
+
+Claude Code ile aynı uç noktayı (`api.anthropic.com/api/oauth/usage`) makinenizdeki oturum jetonuyla sorgular; jeton hiçbir zaman ağ üzerinden başka bir yere gönderilmez.
+
+**Güncel sürüm:** `v1.0.2` — sürüm geçmişi için [CHANGELOG.md](CHANGELOG.md) dosyasına bakabilirsiniz.
+
+## ✨ Özellikler
+
+| | |
+|---|---|
+| 📊 **Canlı limit takibi** | Güncel oturum (5 saatlik) + haftalık limitler (tüm modeller, Opus, Sonnet, bağlı uygulamalar) |
+| ⏱️ **Çift zaman gösterimi** | Her limit için hem yenilenme saati ("yarın 00:49") hem canlı geri sayım ("4s 24dk sonra") |
+| 🔁 **Otomatik yenileme** | 20 saniyede bir; hata durumunda 5 dakikaya kadar otomatik geri çekilir, başarılı istekte sıfırlanır |
+| 🛡️ **Hataya dayanıklı** | Bağlantı koptuğunda son bilinen veriler ekranda kalır, ham hata yerine anlaşılır Türkçe mesaj gösterilir |
+| 🪟 **Bağımsız uygulama penceresi** | Chrome/Edge varsa adres çubuğu/sekmesiz `--app` penceresi; hiçbiri yoksa varsayılan tarayıcıda sekme |
+| 🙈 **Sessiz çalışma** | Çift tıklandığında arka planda konsol penceresi açılmaz; pencere kapatılınca sunucu süreci de otomatik sonlanır |
+| 📦 **Tek dosya, taşınabilir** | Node'un Single Executable Application özelliğiyle tek bir `.exe`; kurulum, ek bağımlılık veya yönetici izni gerekmez |
+| 🔒 **Gizlilik** | Hiçbir üçüncü taraf servise veri gitmez; tek ağ isteği doğrudan `api.anthropic.com`'a |
+
+## 📸 Ekran Görüntüsü
+
+<div align="center">
+<img src="screenshots/panel.jpg" alt="Claude Limits paneli - güncel oturum ve haftalık limitler" width="560">
+</div>
+
+## 🚀 Kurulum
+
+1. [Releases](https://github.com/mer4t/mer4t-claude-limits/releases/latest) sayfasından `ClaudeLimits.exe` dosyasını indirin.
+2. İstediğiniz bir klasöre kopyalayın (kurulum gerekmez).
+3. Çift tıklayın — Chrome veya Edge varsa bağımsız bir uygulama penceresi açılır.
+
+> Uygulama dijital olarak imzalanmamıştır. İlk çalıştırmada Windows SmartScreen bir uyarı gösterebilir; "Ek bilgi" → "Yine de çalıştır" ile devam edebilirsiniz.
+
+### Ön koşul
+
+Panelin veri gösterebilmesi için Claude Code ile makinenizde **en az bir kez** giriş yapmış olmanız gerekir (`~/.claude/.credentials.json` dosyası oluşur). Panel bu dosyayı her sorguda yeniden okur; Claude Code kendi jetonunu yeniledikçe panel de otomatik güncel jetonu kullanır. Jeton yenileme işlemini panel **yapmaz** — bu, Claude Code'un kendi refresh token rotasyonunu bozabilir.
+
+## 💻 Sistem Gereksinimleri
+
+- Windows 10/11
+- Chrome veya Edge (önerilir — bağımsız pencere modu için); yoksa varsayılan tarayıcıda normal sekme açılır
+- Yönetici izni gerekmez
+
+## 🛠️ Kaynak Koddan Çalıştırma
 
 ```bash
+git clone https://github.com/mer4t/mer4t-claude-limits.git
+cd mer4t-claude-limits
 npm start
 ```
 
-sonra tarayıcıda `http://localhost:4756` açın.
+sonra tarayıcıda `http://localhost:4756` açın. Port, `PORT` ortam değişkeniyle değiştirilebilir.
 
-## .exe olarak paketleme (Windows)
+### .exe olarak paketleme
 
 ```bash
 npm run build
 ```
 
-`dist/ClaudeLimits.exe` üretilir. Bu dosya Node'un [Single Executable Application](https://nodejs.org/api/single-executable-applications.html) özelliğiyle tek bir taşınabilir çalıştırılabilir dosyaya paketlenir; `index.html` de içine gömülüdür, ek dosyaya ihtiyaç duymaz.
+`dist/ClaudeLimits.exe` üretilir. `server.js` ve `index.html`, Node'un [Single Executable Application](https://nodejs.org/api/single-executable-applications.html) özelliğiyle tek bir taşınabilir çalıştırılabilir dosyaya gömülür; ek dosyaya ihtiyaç duymaz. Build betiği ayrıca üretilen exe'nin PE `Subsystem` alanını (editbin gerekmeden, doğrudan header patch ile) GUI olarak işaretler, böylece çift tıklandığında konsol penceresi açılmaz.
 
-Çift tıklandığında yerel sunucuyu başlatır ve Chrome (yoksa Edge) varsa adres çubuğu/sekmeler olmadan bağımsız bir uygulama penceresi (`--app` modu) açar; hiçbiri yoksa varsayılan tarayıcıda normal bir sekme açılır. Konsol penceresi açılmaz (build sırasında exe'nin PE subsystem'i GUI olarak işaretlenir) ve uygulama penceresi kapatıldığında arka plandaki sunucu süreci de otomatik sonlanır.
+## 🗂️ Proje Yapısı
 
-> İmzasız bir derleme olduğu için Windows SmartScreen ilk açılışta uyarı gösterebilir.
+```
+m4claudelimits/
+├── server.js         # Yerel HTTP sunucu: /api/usage proxy'si + uygulama penceresi açma
+├── index.html         # Panelin tüm arayüzü (HTML/CSS/JS, tek dosya)
+├── build.js           # server.js + index.html -> dist/ClaudeLimits.exe (Node SEA + subsystem patch)
+├── sea-config.json     # Node SEA build yapılandırması
+└── dist/               # Build çıktısı (git'e dahil değildir)
+```
 
-## Notlar
+## ⚠️ Bilinen Sınırlamalar
 
-- Port varsayılan olarak `4756`; `PORT` ortam değişkeniyle değiştirilebilir.
-- Herhangi bir üçüncü taraf servise veri göndermez; tek ağ isteği doğrudan `api.anthropic.com`'a gider.
+- Build betiği (`build.js`) yalnızca Windows için yazılmıştır; `.exe` üretimi başka bir işletim sisteminde çalışmaz. Kaynak koddan çalıştırma (`npm start`) platform bağımsızdır.
+- Chrome veya Edge kurulu değilse bağımsız pencere modu kullanılamaz, panel varsayılan tarayıcıda normal bir sekmede açılır.
+- `.exe` dijital olarak imzalanmamıştır; Windows SmartScreen ilk çalıştırmada uyarı gösterebilir.
+
+## 📜 Sürüm Geçmişi
+
+Ayrıntılı sürüm notları için [CHANGELOG.md](CHANGELOG.md) dosyasına bakın.
+
+## 🤝 Katkıda Bulunma
+
+Hata bildirimi veya öneri için lütfen bir [GitHub Issue](https://github.com/mer4t/mer4t-claude-limits/issues) açın.
