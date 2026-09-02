@@ -14,6 +14,20 @@ const path = require('node:path');
 const os = require('node:os');
 const { exec, spawn } = require('node:child_process');
 
+// .exe konsol penceresi gizlenmis (GUI subsystem) sekilde calisirken stdout/
+// stderr'e bagli bir konsol olmuyor; bu durumda console.log/error normalde
+// sessizce yut ulur ama bazi Windows/Node surumlerinde yazma islemi hata
+// firlatabilir (EBADF). Uygulamanin bu yuzden cokmemesi icin sarmalıyoruz.
+for (const stream of [process.stdout, process.stderr]) {
+  if (stream) stream.on('error', () => {});
+}
+for (const name of ['log', 'error', 'warn']) {
+  const orig = console[name].bind(console);
+  console[name] = (...args) => {
+    try { orig(...args); } catch { /* konsol yok, yut */ }
+  };
+}
+
 let sea = null;
 try {
   sea = require('node:sea');
@@ -53,15 +67,29 @@ async function readOAuth() {
   return oauth;
 }
 
+const FETCH_TIMEOUT_MS = 10000;
+
 async function fetchUsage() {
   const oauth = await readOAuth();
-  const res = await fetch(USAGE_URL, {
-    headers: {
-      Authorization: `Bearer ${oauth.accessToken}`,
-      'anthropic-beta': 'oauth-2025-04-20',
-      'User-Agent': 'm4claudelimits/1.0 (local usage dashboard)',
-    },
-  });
+  let res;
+  try {
+    res = await fetch(USAGE_URL, {
+      headers: {
+        Authorization: `Bearer ${oauth.accessToken}`,
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'm4claudelimits/1.0 (local usage dashboard)',
+      },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const err = new Error(
+      e.name === 'TimeoutError' || e.name === 'AbortError'
+        ? 'Anthropic API zaman asimina ugradi, tekrar denenecek.'
+        : `Anthropic API'ye baglanilamadi: ${e.message}`
+    );
+    err.status = 504;
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     let message;
@@ -132,7 +160,7 @@ function findChromiumBrowser() {
   return candidates.find((p) => p && fs.existsSync(p)) || null;
 }
 
-function launchAppWindow(url) {
+function launchAppWindow(url, { attachLifecycle = false } = {}) {
   const browser = findChromiumBrowser();
   if (!browser) {
     // Chrome/Edge bulunamadi, varsayilan tarayicida sekme olarak ac.
@@ -142,8 +170,11 @@ function launchAppWindow(url) {
   // Ayri bir --user-data-dir ile acmazsak, tarayici zaten acikken --app bayragi
   // yok sayilip normal bir sekmede acilabiliyor; bu yuzden kendine ait bir
   // profil kullaniyoruz. Bu, kullanicinin ana tarayici profilinden bagimsizdir.
+  // Ayrica bu ayri profil sayesinde spawn edilen surec, o pencereye ait
+  // gercek tarayici sureci oluyor (mevcut bir Chrome'a devredilmiyor); bu da
+  // pencere kapatilinca 'exit' olayini guvenilir sekilde yakalamamizi saglar.
   const profileDir = path.join(os.tmpdir(), 'claude-limits-app-profile');
-  spawn(
+  const child = spawn(
     browser,
     [
       `--app=${url}`,
@@ -152,8 +183,16 @@ function launchAppWindow(url) {
       '--no-first-run',
       '--no-default-browser-check',
     ],
-    { detached: true, stdio: 'ignore' }
-  ).unref();
+    attachLifecycle ? { stdio: 'ignore' } : { detached: true, stdio: 'ignore' }
+  );
+  if (attachLifecycle) {
+    // Uygulama penceresi kapatilinca arka planda calisan yerel sunucuyu da
+    // kapat; boylece process, konsol penceresi gizlendikten sonra bile
+    // gorev yoneticisinde sonsuza kadar takilı kalmiyor.
+    child.on('exit', () => process.exit(0));
+  } else {
+    child.unref();
+  }
 }
 
 server.on('error', (err) => {
@@ -174,7 +213,8 @@ server.listen(PORT, () => {
   console.log(`Claude limitleri paneli hazir: ${url}`);
   // .exe olarak cift tiklandiginda pencereyi otomatik ac; `node server.js` ile
   // gelistirme sirasinda her calistirmada pencere acilmasin diye sadece SEA modunda.
+  // attachLifecycle: true -> pencere kapatilinca bu sunucu sureci de kapanir.
   if (isSea && process.platform === 'win32') {
-    launchAppWindow(url);
+    launchAppWindow(url, { attachLifecycle: true });
   }
 });
