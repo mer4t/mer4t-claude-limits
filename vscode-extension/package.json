@@ -1,0 +1,81 @@
+{
+  "name": "claude-limits",
+  "displayName": "Claude Limits",
+  "description": "%description%",
+  "version": "1.0.0",
+  "publisher": "mer4t",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mer4t/mer4t-claude-limits.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/mer4t/mer4t-claude-limits/issues"
+  },
+  "homepage": "https://github.com/mer4t/mer4t-claude-limits#readme",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "usage",
+    "rate limit",
+    "status bar"
+  ],
+  "main": "./src/extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeLimits.open",
+        "title": "%command.open%",
+        "category": "Claude Limits"
+      },
+      {
+        "command": "claudeLimits.refresh",
+        "title": "%command.refresh%",
+        "category": "Claude Limits"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Limits",
+      "properties": {
+        "claudeLimits.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.showStatusBar%"
+        },
+        "claudeLimits.refreshInterval": {
+          "type": "number",
+          "default": 60,
+          "minimum": 30,
+          "description": "%config.refreshInterval%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/run.js",
+    "package": "npx --yes @vscode/vsce package",
+    "publish": "npx --yes @vscode/vsce publish"
+  }
+}
