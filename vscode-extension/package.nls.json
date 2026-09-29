@@ -1,0 +1,7 @@
+{
+  "description": "Live view of your Claude Code usage limits (5-hour session and weekly) in the status bar and a panel.",
+  "command.open": "Show Usage Limits",
+  "command.refresh": "Refresh Usage Limits",
+  "config.showStatusBar": "Show Claude Code usage in the status bar.",
+  "config.refreshInterval": "How often to refresh usage, in seconds (minimum 30). Only the focused VS Code window refreshes."
+}

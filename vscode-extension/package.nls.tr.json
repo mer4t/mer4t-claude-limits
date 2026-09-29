@@ -1,0 +1,7 @@
+{
+  "description": "Claude Code kullanım limitlerini (5 saatlik oturum ve haftalık) durum çubuğunda ve bir panelde canlı gösterir.",
+  "command.open": "Kullanım Limitlerini Göster",
+  "command.refresh": "Kullanım Limitlerini Yenile",
+  "config.showStatusBar": "Claude Code kullanımını durum çubuğunda göster.",
+  "config.refreshInterval": "Kullanımın kaç saniyede bir yenileneceği (en az 30). Sadece odaktaki VS Code penceresi yeniler."
+}

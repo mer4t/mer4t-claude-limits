@@ -1,0 +1,71 @@
+/* Renkler VS Code temasindan gelir; marka rengi (turuncu) sabit. */
+:root {
+  --accent: #d97757;
+  --amber: #e2b93b;
+  --red: #e05a4e;
+  --green: #6fbf73;
+  --text: var(--vscode-foreground);
+  --dim: var(--vscode-descriptionForeground);
+  --border: var(--vscode-panel-border, var(--vscode-widget-border, #8884));
+  --track: var(--vscode-input-background, #8883);
+  --mono: var(--vscode-editor-font-family, ui-monospace, Menlo, Consolas, monospace);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px 16px;
+  color: var(--text);
+  background: var(--vscode-editor-background);
+  font-family: var(--mono);
+}
+.window { max-width: 620px; margin: 0 auto; }
+
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+.brand .mark { color: var(--accent); font-size: 18px; }
+.brand .name { font-size: 14.5px; font-weight: 600; }
+.brand .plan { margin-left: auto; font-size: 11.5px; color: var(--dim); }
+
+.status-row { display: flex; align-items: center; gap: 8px; margin: 2px 0 18px; font-size: 11.5px; color: var(--dim); }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+.pulse.err { background: var(--red); animation: pulseErr 1.4s infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(111, 191, 115, .55); }
+  70%, 100% { box-shadow: 0 0 0 6px rgba(111, 191, 115, 0); }
+}
+@keyframes pulseErr {
+  0% { box-shadow: 0 0 0 0 rgba(224, 90, 78, .55); }
+  70%, 100% { box-shadow: 0 0 0 6px rgba(224, 90, 78, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .pulse, .pulse.err { animation: none; } }
+
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.card-head .label { font-size: 13px; }
+.card-head .pct { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.bar { height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #e79274); transition: width .5s ease; }
+.bar.amber > i { background: linear-gradient(90deg, #c98f2a, var(--amber)); }
+.bar.red > i { background: linear-gradient(90deg, #b9463b, var(--red)); }
+
+.meta-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 11.5px; color: var(--dim); }
+
+.footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--dim); }
+.footer button {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--vscode-button-secondaryForeground, var(--text));
+  background: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+.footer button:hover { background: var(--vscode-button-secondaryHoverBackground, transparent); }
+.footer button:disabled { opacity: .5; cursor: default; }
+.footer button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+
+.error-box {
+  display: none; margin-bottom: 12px; padding: 12px 14px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--vscode-inputValidation-errorForeground, var(--text));
+  background: var(--vscode-inputValidation-errorBackground, #5a2d2733);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--red));
+}
+.empty { color: var(--dim); font-size: 12.5px; padding: 6px 2px 14px; }
