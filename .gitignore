@@ -2,3 +2,5 @@ node_modules/
 dist/
 sea-prep.blob
 *.log
+*.vsix
+.DS_Store

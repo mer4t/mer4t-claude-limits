@@ -1,7 +1,7 @@
 {
   "name": "m4claudelimits",
-  "version": "1.0.2",
-  "description": "Claude Code kullanim limitlerini (5 saatlik ve haftalik) canli takip eden yerel panel",
+  "version": "1.1.0",
+  "description": "Claude Code kullanim limitlerini (5 saatlik ve haftalik) canli takip eden yerel panel (Windows ve macOS)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -176,9 +176,13 @@ const LABELS = {
   weekly_oauth_apps: 'Bu hafta (bağlı uygulamalar)',
 };
 
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 function prettify(kind){
   if (LABELS[kind]) return LABELS[kind];
-  return kind.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return String(kind || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function fmtAbsolute(iso){
@@ -284,15 +288,15 @@ function render(){
       return `
         <div class="card">
           <div class="card-head">
-            <span class="label">${prettify(l.kind)}</span>
+            <span class="label">${esc(prettify(l.kind))}</span>
             <span class="pct">${pct.toFixed(0)}%</span>
           </div>
           <div class="bar-wrap">
             <div class="bar ${cls}"><i style="width:${pct}%"></i></div>
           </div>
           <div class="meta-row">
-            <span>${abs ? 'yenilenme: ' + abs : 'süresiz'}</span>
-            <span class="countdown" data-reset="${l.resetsAt || ''}">${fmtCountdown(l.resetsAt)}</span>
+            <span>${abs ? 'yenilenme: ' + esc(abs) : 'süresiz'}</span>
+            <span class="countdown" data-reset="${esc(l.resetsAt)}">${esc(fmtCountdown(l.resetsAt))}</span>
           </div>
         </div>`;
     }).join('');
@@ -345,6 +349,12 @@ async function poll(){
 document.getElementById('refreshBtn').addEventListener('click', () => {
   backoffMs = POLL_MS;
   poll();
+});
+
+// Pencere kapaninca sunucuya haber ver (macOS'ta Chrome son pencere
+// kapaninca kapanmadigi icin sunucu bu sinyalle kendini sonlandirir).
+window.addEventListener('pagehide', () => {
+  try { navigator.sendBeacon('/api/bye'); } catch {}
 });
 
 poll();

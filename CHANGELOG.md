@@ -1,5 +1,18 @@
 # Değişiklik Geçmişi
 
+## v1.1.0 - 2026-09-29
+
+macOS desteği ve güvenlik/sağlamlık düzeltmeleri:
+
+- **macOS desteği:** oturum jetonu Claude Code'un Keychain kaydından (`Claude Code-credentials`) okunuyor, bulunamazsa `~/.claude/.credentials.json` dosyasına bakılıyor. Chrome/Edge/Brave/Chromium `--app` penceresiyle açılıyor, hiçbiri yoksa `open` ile varsayılan tarayıcı kullanılıyor.
+- `npm run build` macOS'ta `dist/ClaudeLimits.app` üretiyor (SEA + ad-hoc imza, Terminal penceresi ve Dock ikonu olmadan).
+- macOS'ta Chrome son pencere kapanınca kapanmadığı için panel, pencere kapanırken sunucuya haber veriyor; sunucu kısa bir bekleme sonrası tarayıcı sürecini de kapatıp sonlanıyor.
+- Bozuk bir `Host` başlığıyla gelen isteğin sunucuyu çökertmesi düzeltildi; beklenmedik istek hataları artık süreci düşürmüyor, 500 dönüyor.
+- Yerel sunucu artık yalnızca `127.0.0.1`'i dinliyor (önceden aynı ağdaki cihazlar da erişebiliyordu).
+- Arayüzde API'den gelen değerler HTML'e yazılmadan önce kaçış karakterlerine çevriliyor.
+- Windows build'inde boşluk içeren klasör yollarında `postject` adımının bozulması düzeltildi.
+- README ve yorumlardaki küçük hatalar düzeltildi.
+
 ## v1.0.2 - 2026-09-02
 
 Kullanıcıdan gelen geri bildirim üzerine çözülen sorun: `.exe` çalıştırıldığında arka planda bir konsol (cmd benzeri) penceresi açılıyor ve uygulama penceresi kapatılsa bile süreç arka planda çalışmaya devam ediyordu.
