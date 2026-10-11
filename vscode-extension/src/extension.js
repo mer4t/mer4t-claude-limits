@@ -1,8 +1,13 @@
 const vscode = require('vscode');
+const crypto = require('node:crypto');
 const { fetchUsage, UsageError } = require('./usage');
 
 const MIN_INTERVAL_S = 30;
 const MAX_BACKOFF_MS = 5 * 60000;
+// Limit sifirlandiktan sonra yeni degerin API'ye yansimasi icin kisa bir pay.
+const RESET_SLACK_MS = 5000;
+const VIEW_TYPE = 'claudeLimits.panel';
+const LEVEL_RANK = { normal: 0, warning: 1, critical: 2 };
 
 function t(message, ...args) {
   return vscode.l10n.t(message, ...args);
@@ -28,6 +33,8 @@ function errorMessage(e) {
       return t('The session token seems to have expired. Open Claude Code once so it refreshes its token; this panel will recover automatically.');
     case 'RATE_LIMITED':
       return t('Anthropic is rate limiting requests right now. Will slow down and retry shortly.');
+    case 'BAD_RESPONSE':
+      return t('Anthropic API returned an unexpected response, will retry.');
     case 'API_ERROR':
       return t('Anthropic API error ({0}): {1}', d.status, d.body || '');
     default:
@@ -46,12 +53,27 @@ function limitLabel(kind) {
   }
 }
 
+// Durum cubugundaki kisa ad.
+function shortLabel(kind) {
+  switch (kind) {
+    case 'weekly_opus': return 'Opus';
+    case 'weekly_sonnet': return 'Sonnet';
+    case 'weekly_oauth_apps': return t('apps');
+    default: return limitLabel(kind);
+  }
+}
+
+function rank(l) {
+  return LEVEL_RANK[l && l.level] || 0;
+}
+
 function webviewStrings() {
   return {
     title: t('Claude Code usage limits'),
     connecting: t('connecting…'),
     live: t('live'),
     staleError: t('connection error — showing last known data'),
+    connectionError: t('connection error'),
     noData: t('No limit data to display.'),
     resets: t('resets'),
     noReset: t('no reset'),
@@ -62,7 +84,8 @@ function webviewStrings() {
     unitDay: t('d'),
     unitHour: t('h'),
     unitMin: t('m'),
-    updated: t('updated {0}s ago'),
+    unitSec: t('s'),
+    updated: t('updated {0} ago'),
     refresh: t('refresh now'),
   };
 }
@@ -76,6 +99,7 @@ class Controller {
     this.backoffMs = null;
     this.lastAttempt = 0;
     this.panel = null;
+    this.disposed = false;
 
     this.status = vscode.window.createStatusBarItem('claudeLimits.status', vscode.StatusBarAlignment.Right, 100);
     this.status.name = t('Claude Limits');
@@ -85,17 +109,23 @@ class Controller {
     context.subscriptions.push(
       vscode.commands.registerCommand('claudeLimits.open', () => this.openPanel()),
       vscode.commands.registerCommand('claudeLimits.refresh', () => this.refreshNow()),
+      // Pencere yeniden yuklenince acik panel geri gelsin.
+      vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
+        deserializeWebviewPanel: async (panel) => this.attachPanel(panel),
+      }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('claudeLimits')) {
           this.renderStatus();
-          this.schedule(0);
+          // Ayar degisikligi hata sonrasi beklemeyi (ornegin 429) bozmasin.
+          this.schedule(this.msUntilDue());
         }
       }),
       vscode.window.onDidChangeWindowState((s) => {
-        // Arka plandayken sorgu atlaniyor; pencereye donulunce veri eskiyse hemen yenile.
-        if (s.focused && Date.now() - this.lastAttempt >= this.intervalMs()) this.schedule(0);
+        // Arka plandayken sorgu atlaniyor; pencereye donulunce veri eskiyse hemen
+        // yenile. Hata sonrasi bekleme (ornegin 429) suruyorsa onu bozmuyoruz.
+        if (s.focused && this.msUntilDue() === 0) this.schedule(0);
       }),
-      { dispose: () => clearTimeout(this.timer) }
+      { dispose: () => { this.disposed = true; clearTimeout(this.timer); } }
     );
 
     this.renderStatus();
@@ -114,6 +144,11 @@ class Controller {
     return this.config().get('showStatusBar') !== false;
   }
 
+  // Bir sonraki sorguya kalan sure; hata sonrasi bekleme varsa o esas alinir.
+  msUntilDue() {
+    return Math.max(0, this.lastAttempt + (this.backoffMs || this.intervalMs()) - Date.now());
+  }
+
   // Durum cubugu kapaliysa ve panel acik degilse API'ye hic istek atilmaz.
   isNeeded() {
     return this.statusBarEnabled() || !!this.panel;
@@ -121,7 +156,20 @@ class Controller {
 
   schedule(delayMs) {
     clearTimeout(this.timer);
+    if (this.disposed) return;
     this.timer = setTimeout(() => this.tick(), delayMs);
+  }
+
+  // Bir limit bir sonraki yenilemeden once sifirlanacaksa o an yenile.
+  nextDelayMs() {
+    let delay = this.intervalMs();
+    const limits = (this.latest && this.latest.data && this.latest.data.limits) || [];
+    const now = Date.now();
+    for (const l of limits) {
+      const at = l.resetsAt ? new Date(l.resetsAt).getTime() : NaN;
+      if (at > now) delay = Math.min(delay, at - now + RESET_SLACK_MS);
+    }
+    return delay;
   }
 
   tick() {
@@ -152,13 +200,17 @@ class Controller {
       this.backoffMs = null;
     } catch (e) {
       this.latest = { data: this.latest && this.latest.data, error: errorMessage(e) };
-      this.backoffMs = Math.min((this.backoffMs || this.intervalMs()) * 2, MAX_BACKOFF_MS);
+      // Tavan, kullanicinin sectigi araliktan kisa olamaz; yoksa hata
+      // durumunda normalden sik sorgu atilirdi.
+      const cap = Math.max(MAX_BACKOFF_MS, this.intervalMs());
+      this.backoffMs = Math.min((this.backoffMs || this.intervalMs()) * 2, cap);
     } finally {
       this.inFlight = false;
     }
+    if (this.disposed) return;
     this.renderStatus();
     this.postState();
-    this.schedule(this.backoffMs || this.intervalMs());
+    this.schedule(this.backoffMs || this.nextDelayMs());
   }
 
   renderStatus() {
@@ -169,18 +221,24 @@ class Controller {
     const data = this.latest && this.latest.data;
     const error = this.latest && this.latest.error;
     const limits = (data && data.limits) || [];
-    const session = limits.find((l) => l.kind === 'session');
-    const weekly = limits.find((l) => l.kind === 'weekly_all');
-    const parts = [session, weekly].filter(Boolean).map((l) => `${Math.round(l.percent)}%`);
+    const shown = ['session', 'weekly_all'].map((k) => limits.find((l) => l.kind === k)).filter(Boolean);
+    const parts = shown.map((l) => `${Math.round(l.percent)}%`);
+
+    // Renk en kritik limitten gelir. O limit durum cubugunda gorunmuyorsa
+    // (ornegin Opus) metne de eklenir; yoksa rengin nedeni anlasilmiyordu.
+    const worst = limits.reduce((w, l) => (!w || rank(l) > rank(w) ? l : w), null);
+    if (worst && rank(worst) > 0 && !shown.includes(worst) && rank(worst) > Math.max(0, ...shown.map(rank))) {
+      parts.push(`${shortLabel(worst.kind)} ${Math.round(worst.percent)}%`);
+    }
 
     let text = '✳ ' + (parts.length ? parts.join(' · ') : '—');
     if (error) text = '$(warning) ' + text;
     this.status.text = text;
 
-    const max = limits.reduce((m, l) => Math.max(m, l.percent), 0);
+    const level = worst ? worst.level : 'normal';
     this.status.backgroundColor =
-      max >= 90 ? new vscode.ThemeColor('statusBarItem.errorBackground')
-        : max >= 70 ? new vscode.ThemeColor('statusBarItem.warningBackground')
+      level === 'critical' ? new vscode.ThemeColor('statusBarItem.errorBackground')
+        : level === 'warning' ? new vscode.ThemeColor('statusBarItem.warningBackground')
           : undefined;
 
     const md = new vscode.MarkdownString();
@@ -199,31 +257,48 @@ class Controller {
     this.status.show();
   }
 
+  mediaRoot() {
+    return vscode.Uri.joinPath(this.context.extensionUri, 'media');
+  }
+
   openPanel() {
     if (this.panel) {
       this.panel.reveal();
       return;
     }
-    const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media');
-    const panel = vscode.window.createWebviewPanel('claudeLimits.panel', t('Claude Limits'), vscode.ViewColumn.Active, {
+    const panel = vscode.window.createWebviewPanel(VIEW_TYPE, t('Claude Limits'), vscode.ViewColumn.Active, {
       enableScripts: true,
-      localResourceRoots: [mediaRoot],
+      localResourceRoots: [this.mediaRoot()],
     });
+    this.attachPanel(panel);
+  }
+
+  // Hem yeni acilan hem de pencere yeniden yuklenince geri getirilen panel icin.
+  attachPanel(panel) {
+    if (this.panel && this.panel !== panel) this.panel.dispose();
+    const mediaRoot = this.mediaRoot();
+    panel.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
     panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'icon.png');
     panel.webview.html = this.panelHtml(panel.webview, mediaRoot);
-    panel.webview.onDidReceiveMessage((msg) => {
-      if (msg && msg.type === 'refresh') this.refreshNow();
-      if (msg && msg.type === 'ready') this.postState();
-    }, null, this.context.subscriptions);
-    panel.onDidChangeViewState(() => {
-      if (panel.visible) this.postState();
-    });
-    panel.onDidDispose(() => {
-      this.panel = null;
-    });
+    // Dinleyiciler panelle birlikte atilir; context.subscriptions'a eklenseydi
+    // panel her acilip kapandiginda birikirdi.
+    const disposables = [
+      panel.webview.onDidReceiveMessage((msg) => {
+        if (msg && msg.type === 'refresh') this.refreshNow();
+        if (msg && msg.type === 'ready') this.postState();
+      }),
+      panel.onDidChangeViewState(() => {
+        if (panel.visible) this.postState();
+      }),
+    ];
+    disposables.push(panel.onDidDispose(() => {
+      if (this.panel === panel) this.panel = null;
+      for (const d of disposables) d.dispose();
+    }));
     this.panel = panel;
-    // Durum cubugu kapaliyken polling durmus olabilir.
-    if (!this.inFlight && (!this.latest || Date.now() - this.lastAttempt >= this.intervalMs())) this.schedule(0);
+    // Durum cubugu kapaliyken polling durmus olabilir; veri tazeyse bile bir
+    // sonraki sorgu mutlaka planlanmali.
+    if (!this.inFlight) this.schedule(this.msUntilDue());
   }
 
   postToPanel(msg) {
@@ -245,7 +320,7 @@ class Controller {
   }
 
   panelHtml(webview, mediaRoot) {
-    const nonce = [...Array(32)].map(() => Math.floor(Math.random() * 36).toString(36)).join('');
+    const nonce = crypto.randomBytes(16).toString('base64');
     const css = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.css'));
     const js = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'panel.js'));
     const init = JSON.stringify({ strings: webviewStrings(), locale: vscode.env.language }).replace(/</g, '\\u003c');
