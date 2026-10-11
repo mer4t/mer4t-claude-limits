@@ -33,6 +33,7 @@
     const diff = new Date(iso).getTime() - Date.now();
     if (!(diff > 0)) return S.resetting;
     const totalMin = Math.floor(diff / 60000);
+    if (totalMin === 0) return fmt(S.left, '<1' + S.unitMin);
     const days = Math.floor(totalMin / 1440);
     const hrs = Math.floor((totalMin % 1440) / 60);
     const min = totalMin % 60;
@@ -43,10 +44,14 @@
     return fmt(S.left, parts.join(' '));
   }
 
-  function severityClass(pct, severity) {
-    if (severity === 'critical' || pct >= 90) return 'red';
-    if (severity === 'warning' || pct >= 70) return 'amber';
-    return '';
+  // Seviye (normal/warning/critical) eklenti tarafinda usage.js'te hesaplanir.
+  const LEVEL_CLASS = { critical: 'red', warning: 'amber' };
+
+  function fmtAgo(secs) {
+    if (secs < 60) return secs + S.unitSec;
+    const min = Math.floor(secs / 60);
+    if (min < 60) return min + S.unitMin;
+    return Math.floor(min / 60) + S.unitHour + ' ' + (min % 60) + S.unitMin;
   }
 
   function el(tag, cls, text) {
@@ -65,7 +70,7 @@
       $('statusText').textContent = S.connecting;
     } else if (state.error) {
       pulse.classList.add('err');
-      $('statusText').textContent = S.staleError;
+      $('statusText').textContent = (state.limits || []).length ? S.staleError : S.connectionError;
       errorBox.textContent = state.error;
       errorBox.style.display = 'block';
     } else {
@@ -88,7 +93,7 @@
       const head = el('div', 'card-head');
       head.append(el('span', 'label', l.label), el('span', 'pct', pct.toFixed(0) + '%'));
 
-      const bar = el('div', 'bar ' + severityClass(pct, l.severity));
+      const bar = el('div', 'bar ' + (LEVEL_CLASS[l.level] || ''));
       bar.setAttribute('role', 'progressbar');
       bar.setAttribute('aria-valuenow', String(Math.round(pct)));
       bar.setAttribute('aria-valuemin', '0');
@@ -116,7 +121,7 @@
     });
     if (state && state.fetchedAt) {
       const secs = Math.max(0, Math.round((Date.now() - new Date(state.fetchedAt).getTime()) / 1000));
-      $('lastUpdated').textContent = fmt(S.updated, secs);
+      $('lastUpdated').textContent = fmt(S.updated, fmtAgo(secs));
     }
   }
 

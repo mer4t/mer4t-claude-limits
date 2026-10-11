@@ -130,9 +130,11 @@
   .error-box{
     border: 1px solid #5a2d27; background: #2a1512; color: #f0b3ab;
     border-radius: 8px; padding: 12px 14px; font-size: 12.5px; line-height:1.5;
-    margin-bottom: 12px; display:none;
+    margin-bottom: 12px;
   }
   .empty{ color: var(--dim); font-size: 12.5px; padding: 6px 2px 14px; }
+  .footer button:disabled{ opacity:.5; cursor:default; }
+  [hidden]{ display:none !important; }
 </style>
 </head>
 <body>
@@ -153,9 +155,9 @@
         <span id="statusText">bağlanıyor…</span>
       </div>
 
-      <div class="error-box" id="errorBox"></div>
+      <div class="error-box" id="errorBox" role="alert" hidden></div>
       <div id="cards"></div>
-      <div class="empty" id="emptyMsg" style="display:none">Görüntülenecek limit verisi yok.</div>
+      <div class="empty" id="emptyMsg" hidden>Görüntülenecek limit verisi yok.</div>
 
       <div class="footer">
         <span id="lastUpdated">—</span>
@@ -165,8 +167,12 @@
   </div>
 
 <script>
-const POLL_MS = 20000;
+const POLL_MS = 60000;
+const PING_MS = 60000;
 const TICK_MS = 1000;
+const MAX_BACKOFF_MS = 5 * 60000;
+// Limit sifirlandiktan sonra yeni degerin API'ye yansimasi icin kisa bir pay.
+const RESET_SLACK_MS = 5000;
 
 const LABELS = {
   session: 'Güncel oturum (5 saatlik)',
@@ -175,23 +181,31 @@ const LABELS = {
   weekly_sonnet: 'Bu hafta (Sonnet)',
   weekly_oauth_apps: 'Bu hafta (bağlı uygulamalar)',
 };
+const LEVEL_CLASS = { critical: 'red', warning: 'amber' };
 
-function esc(v){
-  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-}
+// Sunucu ayni anda acik birden fazla pencereyi bu kimlikle ayirt eder; biri
+// kapaninca digeri hala aciksa kapanmaz.
+const PAGE_ID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+const pageQuery = 'page=' + encodeURIComponent(PAGE_ID);
+const $ = (id) => document.getElementById(id);
 
 function prettify(kind){
   if (LABELS[kind]) return LABELS[kind];
   return String(kind || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function fmtAbsolute(iso){
-  if(!iso) return null;
+function validDate(iso){
+  if (!iso) return null;
   const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function fmtAbsolute(iso){
+  const d = validDate(iso);
+  if (!d) return null;
   const now = new Date();
   const time = d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return `bugün ${time}`;
+  if (d.toDateString() === now.toDateString()) return `bugün ${time}`;
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate()+1);
   if (d.toDateString() === tomorrow.toDateString()) return `yarın ${time}`;
   const datePart = d.toLocaleDateString('tr-TR', { day:'2-digit', month:'short' });
@@ -199,10 +213,12 @@ function fmtAbsolute(iso){
 }
 
 function fmtCountdown(iso){
-  if(!iso) return '—';
-  const diff = new Date(iso).getTime() - Date.now();
+  const d = validDate(iso);
+  if (!d) return '—';
+  const diff = d.getTime() - Date.now();
   if (diff <= 0) return 'yenileniyor…';
   const totalMin = Math.floor(diff/60000);
+  if (totalMin === 0) return '<1dk sonra';
   const days = Math.floor(totalMin/1440);
   const hrs = Math.floor((totalMin%1440)/60);
   const min = totalMin%60;
@@ -213,152 +229,166 @@ function fmtCountdown(iso){
   return parts.join(' ') + ' sonra';
 }
 
-function severityClass(pct, severity){
-  if (severity === 'critical' || pct >= 90) return 'red';
-  if (severity === 'warning' || pct >= 70) return 'amber';
-  return '';
+function fmtAgo(secs){
+  if (secs < 60) return secs + 'sn';
+  const min = Math.floor(secs/60);
+  if (min < 60) return min + 'dk';
+  return Math.floor(min/60) + 'sa ' + (min%60) + 'dk';
 }
 
-function normalize(data){
-  if (Array.isArray(data.limits) && data.limits.length){
-    return data.limits.map(l => ({
-      kind: l.kind,
-      percent: Number(l.percent) || 0,
-      resetsAt: l.resets_at,
-      severity: l.severity,
-    }));
-  }
-  const out = [];
-  const map = [
-    ['session', data.five_hour],
-    ['weekly_all', data.seven_day],
-    ['weekly_opus', data.seven_day_opus],
-    ['weekly_sonnet', data.seven_day_sonnet],
-    ['weekly_oauth_apps', data.seven_day_oauth_apps],
-  ];
-  for (const [kind, obj] of map){
-    if (obj && typeof obj.utilization === 'number'){
-      out.push({ kind, percent: obj.utilization, resetsAt: obj.resets_at, severity: null });
-    }
-  }
-  return out;
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
 }
 
-let latest = null; // { limits, fetchedAt, error }
+let latest = null; // { limits, fetchedAt, subscriptionType, rateLimitTier, error }
 
+// Kartlar innerHTML yerine DOM ile kuruluyor: API'den gelen degerler HTML
+// olarak yorumlanamaz ve CSP satir ici stile izin vermek zorunda kalmaz.
 function render(){
-  const cardsEl = document.getElementById('cards');
-  const emptyEl = document.getElementById('emptyMsg');
-  const errorBox = document.getElementById('errorBox');
-  const pulse = document.getElementById('pulse');
-  const statusText = document.getElementById('statusText');
-  const planEl = document.getElementById('plan');
-  const lastUpdatedEl = document.getElementById('lastUpdated');
-
   if (!latest){
-    statusText.textContent = 'bağlanıyor…';
+    $('statusText').textContent = 'bağlanıyor…';
     return;
   }
+  const limits = latest.limits || [];
 
   if (latest.error){
-    pulse.classList.add('err');
-    statusText.textContent = 'bağlantı hatası — son bilinen veriler gösteriliyor';
-    errorBox.style.display = 'block';
-    errorBox.textContent = latest.error;
+    $('pulse').classList.add('err');
+    $('statusText').textContent = limits.length ? 'bağlantı hatası — son bilinen veriler gösteriliyor' : 'bağlantı hatası';
+    $('errorBox').textContent = latest.error;
+    $('errorBox').hidden = false;
   } else {
-    pulse.classList.remove('err');
-    statusText.textContent = 'canlı';
-    errorBox.style.display = 'none';
+    $('pulse').classList.remove('err');
+    $('statusText').textContent = 'canlı';
+    $('errorBox').hidden = true;
   }
 
   if (latest.subscriptionType){
-    planEl.textContent = latest.subscriptionType.toUpperCase() + (latest.rateLimitTier ? ' · ' + latest.rateLimitTier : '');
+    $('plan').textContent = String(latest.subscriptionType).toUpperCase() + (latest.rateLimitTier ? ' · ' + latest.rateLimitTier : '');
   }
 
-  const limits = latest.limits || [];
-  if (!limits.length){
-    cardsEl.innerHTML = '';
-    emptyEl.style.display = 'block';
-  } else {
-    emptyEl.style.display = 'none';
-    cardsEl.innerHTML = limits.map((l, i) => {
-      const pct = Math.max(0, Math.min(100, l.percent));
-      const cls = severityClass(pct, l.severity);
-      const abs = fmtAbsolute(l.resetsAt);
-      return `
-        <div class="card">
-          <div class="card-head">
-            <span class="label">${esc(prettify(l.kind))}</span>
-            <span class="pct">${pct.toFixed(0)}%</span>
-          </div>
-          <div class="bar-wrap">
-            <div class="bar ${cls}"><i style="width:${pct}%"></i></div>
-          </div>
-          <div class="meta-row">
-            <span>${abs ? 'yenilenme: ' + esc(abs) : 'süresiz'}</span>
-            <span class="countdown" data-reset="${esc(l.resetsAt)}">${esc(fmtCountdown(l.resetsAt))}</span>
-          </div>
-        </div>`;
-    }).join('');
-  }
+  $('emptyMsg').hidden = limits.length > 0;
+  $('cards').replaceChildren(...limits.map((l) => {
+    const pct = Math.max(0, Math.min(100, Number(l.percent) || 0));
+    const label = prettify(l.kind);
 
-  if (latest.fetchedAt){
-    const secs = Math.max(0, Math.round((Date.now() - new Date(latest.fetchedAt).getTime())/1000));
-    lastUpdatedEl.textContent = `son güncelleme: ${secs}sn önce`;
-  }
+    const head = el('div', 'card-head');
+    head.append(el('span', 'label', label), el('span', 'pct', pct.toFixed(0) + '%'));
+
+    const bar = el('div', 'bar ' + (LEVEL_CLASS[l.level] || ''));
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    bar.setAttribute('aria-label', label);
+    const fill = el('i');
+    fill.style.width = pct + '%';
+    bar.append(fill);
+    const barWrap = el('div', 'bar-wrap');
+    barWrap.append(bar);
+
+    const abs = fmtAbsolute(l.resetsAt);
+    const countdown = el('span', 'countdown', fmtCountdown(l.resetsAt));
+    countdown.dataset.reset = l.resetsAt || '';
+    const meta = el('div', 'meta-row');
+    meta.append(el('span', null, abs ? 'yenilenme: ' + abs : 'süresiz'), countdown);
+
+    const card = el('div', 'card');
+    card.append(head, barWrap, meta);
+    return card;
+  }));
+  tick();
 }
 
-function tickCountdowns(){
-  document.querySelectorAll('.countdown').forEach(el => {
-    const iso = el.getAttribute('data-reset');
-    if (iso) el.textContent = fmtCountdown(iso);
+function tick(){
+  document.querySelectorAll('.countdown').forEach((c) => {
+    if (c.dataset.reset) c.textContent = fmtCountdown(c.dataset.reset);
   });
-  const lastUpdatedEl = document.getElementById('lastUpdated');
   if (latest && latest.fetchedAt){
     const secs = Math.max(0, Math.round((Date.now() - new Date(latest.fetchedAt).getTime())/1000));
-    lastUpdatedEl.textContent = `son güncelleme: ${secs}sn önce`;
+    $('lastUpdated').textContent = `son güncelleme: ${fmtAgo(secs)} önce`;
   }
-  const now = new Date();
-  document.getElementById('clock').textContent = now.toLocaleTimeString('tr-TR');
+  $('clock').textContent = new Date().toLocaleTimeString('tr-TR');
 }
 
-const MAX_BACKOFF_MS = 5 * 60000;
 let backoffMs = POLL_MS;
 let pollTimer = null;
+let inFlight = false;
+let lastAttempt = 0;
 
-async function poll(){
+async function readJson(res){
+  try { return await res.json(); } catch { return null; }
+}
+
+async function poll(force){
+  // Ayni anda tek istek: yenile butonuna art arda basmak API'ye yuklenmesin.
+  if (inFlight) return;
+  inFlight = true;
+  lastAttempt = Date.now();
+  clearTimeout(pollTimer);
+  $('refreshBtn').disabled = true;
   try {
-    const res = await fetch('/api/usage', { cache: 'no-store' });
-    const json = await res.json();
-    if (!res.ok){
-      latest = { ...(latest || {}), error: json.error || ('HTTP ' + res.status) };
-      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
-    } else {
-      latest = { limits: normalize(json), fetchedAt: json.fetchedAt, subscriptionType: json.subscriptionType, rateLimitTier: json.rateLimitTier, error: null };
+    const res = await fetch('/api/usage?' + pageQuery + (force ? '&force=1' : ''), { cache: 'no-store' });
+    const json = await readJson(res);
+    if (res.ok && json && Array.isArray(json.limits)){
+      latest = { limits: json.limits, fetchedAt: json.fetchedAt, subscriptionType: json.subscriptionType, rateLimitTier: json.rateLimitTier, error: null };
       backoffMs = POLL_MS;
+    } else {
+      const error = (json && json.error) || `Yerel sunucu beklenmeyen bir cevap verdi (HTTP ${res.status}).`;
+      latest = { ...(latest || {}), error };
+      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     }
   } catch (e) {
     latest = { ...(latest || {}), error: 'Yerel sunucuya ulaşılamadı: ' + e.message };
     backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+  } finally {
+    inFlight = false;
+    $('refreshBtn').disabled = false;
   }
   render();
-  clearTimeout(pollTimer);
-  pollTimer = setTimeout(poll, backoffMs);
+  scheduleNext();
 }
 
-document.getElementById('refreshBtn').addEventListener('click', () => {
+// Pencere gizliyken API sorgulanmaz (sunucuya sadece ping gider); gorunur
+// olunca kalan sure kadar beklenir. Bir limit sifirlanacaksa o an yenilenir.
+function scheduleNext(){
+  clearTimeout(pollTimer);
+  if (document.hidden) return;
+  const now = Date.now();
+  let delay = backoffMs - (now - lastAttempt);
+  if (latest && !latest.error){
+    for (const l of latest.limits || []){
+      const d = validDate(l.resetsAt);
+      if (d && d.getTime() > now) delay = Math.min(delay, d.getTime() - now + RESET_SLACK_MS);
+    }
+  }
+  pollTimer = setTimeout(() => poll(false), Math.max(0, delay));
+}
+
+// Paket uygulamada sunucu, hicbir sayfa ping atmazsa kendini kapatir.
+function ping(){
+  fetch('/api/ping?' + pageQuery, { cache: 'no-store' }).catch(() => {});
+}
+
+$('refreshBtn').addEventListener('click', () => {
   backoffMs = POLL_MS;
-  poll();
+  poll(true);
 });
+
+document.addEventListener('visibilitychange', scheduleNext);
 
 // Pencere kapaninca sunucuya haber ver (macOS'ta Chrome son pencere
-// kapaninca kapanmadigi icin sunucu bu sinyalle kendini sonlandirir).
+// kapaninca kapanmadigi, varsayilan tarayicida ise pencereyi hic
+// izleyemedigimiz icin sunucu bu sinyalle kendini sonlandirir).
 window.addEventListener('pagehide', () => {
-  try { navigator.sendBeacon('/api/bye'); } catch {}
+  try { navigator.sendBeacon('/api/bye?' + pageQuery); } catch {}
 });
 
-poll();
-setInterval(tickCountdowns, TICK_MS);
+poll(false);
+setInterval(tick, TICK_MS);
+setInterval(ping, PING_MS);
 </script>
 </body>
 </html>

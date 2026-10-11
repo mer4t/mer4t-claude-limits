@@ -6,7 +6,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/mer4t/mer4t-claude-limits?label=latest%20release&color=orange)](https://github.com/mer4t/mer4t-claude-limits/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-0078D6)](#)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520.12-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![SEA](https://img.shields.io/badge/packaging-Node%20SEA-000000)](https://nodejs.org/api/single-executable-applications.html)
 
 <img src="screenshots/panel.jpg" alt="Claude Limits paneli" width="500">
@@ -31,12 +31,12 @@ Claude Code ile aynı uç noktayı (`api.anthropic.com/api/oauth/usage`) makinen
 |---|---|
 | 📊 **Canlı limit takibi** | Güncel oturum (5 saatlik) + haftalık limitler (tüm modeller, Opus, Sonnet, bağlı uygulamalar) |
 | ⏱️ **Çift zaman gösterimi** | Her limit için hem yenilenme saati ("yarın 00:49") hem canlı geri sayım ("4s 24dk sonra") |
-| 🔁 **Otomatik yenileme** | 20 saniyede bir; hata durumunda 5 dakikaya kadar otomatik geri çekilir, başarılı istekte sıfırlanır |
+| 🔁 **Otomatik yenileme** | Dakikada bir; bir limit sıfırlandığı anda ayrıca yenilenir. Pencere gizliyken sorgu yapılmaz. Hata durumunda 5 dakikaya kadar otomatik geri çekilir, başarılı istekte sıfırlanır |
 | 🛡️ **Hataya dayanıklı** | Bağlantı koptuğunda son bilinen veriler ekranda kalır, ham hata yerine anlaşılır Türkçe mesaj gösterilir |
 | 🪟 **Bağımsız uygulama penceresi** | Chrome/Edge (macOS'ta ayrıca Brave/Chromium) varsa adres çubuğu/sekmesiz `--app` penceresi; hiçbiri yoksa varsayılan tarayıcıda sekme |
 | 🙈 **Sessiz çalışma** | Çift tıklandığında arka planda konsol/Terminal penceresi açılmaz; pencere kapatılınca sunucu süreci de otomatik sonlanır |
 | 📦 **Tek dosya, taşınabilir** | Node'un Single Executable Application özelliğiyle tek bir `.exe` (Windows) veya `.app` (macOS); kurulum, ek bağımlılık veya yönetici izni gerekmez |
-| 🔒 **Gizlilik** | Hiçbir üçüncü taraf servise veri gitmez; tek ağ isteği doğrudan `api.anthropic.com`'a. Yerel sunucu yalnızca `127.0.0.1`'i dinler, ağdaki diğer cihazlar erişemez |
+| 🔒 **Gizlilik** | Hiçbir üçüncü taraf servise veri gitmez; tek ağ isteği doğrudan `api.anthropic.com`'a. Yerel sunucu yalnızca `127.0.0.1`'i dinler, ağdaki diğer cihazlar erişemez; ziyaret ettiğiniz web sitelerinden gelen istekler de reddedilir |
 
 ## 🚀 Kurulum
 
@@ -74,9 +74,17 @@ cd mer4t-claude-limits
 npm start
 ```
 
-sonra tarayıcıda `http://localhost:4756` açın. Port, `PORT` ortam değişkeniyle değiştirilebilir.
+sonra tarayıcıda `http://localhost:4756` açın. Port, `PORT` ortam değişkeniyle değiştirilebilir; belirtilmezse ve 4756 başka bir uygulama tarafından kullanılıyorsa sonraki portlar denenir.
+
+Testler (ek bağımlılık gerekmez, gerçek jetona veya API'ye dokunmaz):
+
+```bash
+npm test
+```
 
 ### .exe olarak paketleme
+
+Paketleme için Node 20.12 veya daha yeni bir sürüm gerekir (daha eskisinde build reddedilir).
 
 ```bash
 npm run build
@@ -85,18 +93,20 @@ npm run build
 Build, üzerinde çalıştırıldığı işletim sistemi için çıktı üretir (çapraz derleme yoktur):
 
 - **Windows:** `dist/ClaudeLimits.exe`. Build betiği exe'nin PE `Subsystem` alanını (editbin gerekmeden, doğrudan header patch ile) GUI olarak işaretler, böylece çift tıklandığında konsol penceresi açılmaz.
-- **macOS:** `dist/ClaudeLimits.app`. İkili `.app` paketine konur (`LSUIElement` ile Dock'ta ayrı ikon ve Terminal penceresi olmadan çalışır) ve ad-hoc imzalanır. Dağıtılacak build'i [nodejs.org](https://nodejs.org/)'daki resmi Node ile alın; Homebrew'un Node'u dinamik kütüphanelere bağlı olduğu için başka Mac'lerde çalışmayabilir (betik bu durumda uyarır).
+- **macOS:** `dist/ClaudeLimits.app`. İkili, eklentinin ikonuyla birlikte `.app` paketine konur (`LSUIElement` ile Dock'ta ayrı ikon ve Terminal penceresi olmadan çalışır) ve ad-hoc imzalanır. Dağıtılacak build'i [nodejs.org](https://nodejs.org/)'daki resmi Node ile alın; Homebrew'un Node'u dinamik kütüphanelere bağlı olduğu için başka Mac'lerde çalışmayabilir (betik bu durumda uyarır).
 
-Her iki durumda da `server.js` ve `index.html`, Node'un [Single Executable Application](https://nodejs.org/api/single-executable-applications.html) özelliğiyle tek bir çalıştırılabilir dosyaya gömülür; ek dosyaya ihtiyaç duymaz.
+Her iki durumda da `server.js`, `index.html` ve eklentiyle ortak kullanılan `vscode-extension/src/usage.js`, Node'un [Single Executable Application](https://nodejs.org/api/single-executable-applications.html) özelliğiyle tek bir çalıştırılabilir dosyaya gömülür; ek dosyaya ihtiyaç duymaz.
 
 ## 🗂️ Proje Yapısı
 
 ```
 mer4t-claude-limits/
 ├── server.js         # Yerel HTTP sunucu: /api/usage proxy'si + uygulama penceresi açma
+│                     #   (jeton okuma ve API sorgusu vscode-extension/src/usage.js'te, eklentiyle ortak)
 ├── index.html         # Panelin tüm arayüzü (HTML/CSS/JS, tek dosya)
 ├── build.js           # server.js + index.html -> dist/ClaudeLimits.exe / .app (Node SEA)
 ├── sea-config.json     # Node SEA build yapılandırması
+├── test/               # Sunucu testleri (npm test)
 ├── vscode-extension/   # VS Code eklentisi (Marketplace: mer4t.claude-limits)
 └── dist/               # Build çıktısı (git'e dahil değildir)
 ```
@@ -104,7 +114,8 @@ mer4t-claude-limits/
 ## ⚠️ Bilinen Sınırlamalar
 
 - Build betiği (`build.js`) Windows ve macOS'u destekler; her platform kendi çıktısını kendisi üretir (Mac'te `.exe`, Windows'ta `.app` üretilemez). Kaynak koddan çalıştırma (`npm start`) her iki platformda da çalışır.
-- Chromium tabanlı bir tarayıcı kurulu değilse bağımsız pencere modu kullanılamaz, panel varsayılan tarayıcıda normal bir sekmede açılır.
+- Chromium tabanlı bir tarayıcı kurulu değilse bağımsız pencere modu kullanılamaz, panel varsayılan tarayıcıda normal bir sekmede açılır. Sekme kapatılınca sunucu birkaç saniye içinde kendini kapatır.
+- macOS'ta uygulama, pencere kapatıldıktan sonraki birkaç saniye içinde tekrar açılırsa pencere gelmeyebilir (macOS çalışan bir uygulamayı yeniden başlatmaz); kısa bir süre sonra tekrar açmak yeterlidir.
 - `.exe` ve `.app` dijital olarak imzalanmamıştır; Windows SmartScreen ve macOS Gatekeeper ilk çalıştırmada uyarı gösterebilir.
 
 ## 📜 Sürüm Geçmişi

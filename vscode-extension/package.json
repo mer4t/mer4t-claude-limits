@@ -16,7 +16,7 @@
   },
   "homepage": "https://github.com/mer4t/mer4t-claude-limits#readme",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Other",
@@ -32,7 +32,8 @@
   "main": "./src/extension.js",
   "l10n": "./l10n",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:claudeLimits.panel"
   ],
   "capabilities": {
     "untrustedWorkspaces": {

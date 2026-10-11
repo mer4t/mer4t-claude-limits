@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// server.js ve index.html'i tek bir tasinabilir uygulama haline getirir (Node'un
+// server.js, index.html ve ortak usage.js'i tek bir tasinabilir uygulama haline getirir (Node'un
 // yerlesik Single Executable Application ozelligi ile):
 //   Windows -> dist/ClaudeLimits.exe
 //   macOS   -> dist/ClaudeLimits.app
@@ -16,10 +16,29 @@ const APP_NAME = 'ClaudeLimits';
 const BLOB_PATH = path.join(ROOT, 'sea-prep.blob');
 const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 const VERSION = require('./package.json').version;
+// Surum sabit: her build'de en son surumu indirmek hem tedarik zinciri riski
+// hem de tekrarlanamayan build demek.
+const POSTJECT = 'postject@1.0.0-alpha.6';
+const ICON_SOURCE = path.join(ROOT, 'vscode-extension', 'media', 'icon.png');
 
 function run(cmd, args, opts = {}) {
   console.log(`> ${cmd} ${args.join(' ')}`);
   execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, ...opts });
+}
+
+// node:sea (sea.isSea/getAsset) Node 20.12'de geldi. Daha eski bir node ile
+// build "basarili" gorunur ama uretilen uygulama acilista coker; bu yuzden
+// build'i en bastan reddediyoruz.
+function assertSeaRuntime() {
+  try {
+    require('node:sea');
+  } catch {
+    console.error(
+      `Bu node surumu (${process.version}) paketli uygulama icin gereken node:sea modulune sahip degil.\n` +
+      'Node 20.12 veya daha yeni bir surumle (tercihen nodejs.org\'daki resmi LTS) tekrar deneyin.'
+    );
+    process.exit(1);
+  }
 }
 
 function makeSeaBlob() {
@@ -36,7 +55,7 @@ function makeSeaBlob() {
 }
 
 function injectBlob(binPath, extraArgs = []) {
-  const args = ['--yes', 'postject', binPath, 'NODE_SEA_BLOB', BLOB_PATH, '--sentinel-fuse', SEA_FUSE, ...extraArgs];
+  const args = ['--yes', POSTJECT, binPath, 'NODE_SEA_BLOB', BLOB_PATH, '--sentinel-fuse', SEA_FUSE, ...extraArgs];
   if (process.platform === 'win32') {
     // npx Windows'ta bir .cmd oldugu icin shell gerekiyor; bosluk iceren
     // yollar bolunmesin diye argumanlari tirnakliyoruz.
@@ -88,6 +107,7 @@ function buildMac() {
   fs.copyFileSync(process.execPath, binPath);
   fs.chmodSync(binPath, 0o755);
   fs.writeFileSync(path.join(appDir, 'Contents', 'Info.plist'), infoPlist());
+  makeIcns(path.join(appDir, 'Contents', 'Resources'));
 
   console.log('3/5 node imzasi kaldiriliyor...');
   run('codesign', ['--remove-signature', binPath]);
@@ -105,6 +125,20 @@ function buildMac() {
   return appDir;
 }
 
+// Eklentinin ikonundan .icns uretir (sips + iconutil macOS ile birlikte gelir).
+function makeIcns(resourcesDir) {
+  const iconset = path.join(DIST_DIR, `${APP_NAME}.iconset`);
+  fs.rmSync(iconset, { recursive: true, force: true });
+  fs.mkdirSync(iconset, { recursive: true });
+  fs.mkdirSync(resourcesDir, { recursive: true });
+  const sizes = [['16x16', 16], ['16x16@2x', 32], ['32x32', 32], ['32x32@2x', 64], ['128x128', 128]];
+  for (const [name, px] of sizes) {
+    execFileSync('sips', ['-z', String(px), String(px), ICON_SOURCE, '--out', path.join(iconset, `icon_${name}.png`)], { stdio: 'ignore' });
+  }
+  run('iconutil', ['-c', 'icns', iconset, '-o', path.join(resourcesDir, `${APP_NAME}.icns`)]);
+  fs.rmSync(iconset, { recursive: true, force: true });
+}
+
 // LSUIElement: sunucu surecinin Dock'ta ayrica bir ikonu olmasin; kullanicinin
 // gordugu pencere zaten tarayicinin --app penceresi.
 function infoPlist() {
@@ -116,6 +150,7 @@ function infoPlist() {
   <key>CFBundleDisplayName</key><string>Claude Limits</string>
   <key>CFBundleIdentifier</key><string>com.mer4t.claudelimits</string>
   <key>CFBundleExecutable</key><string>${APP_NAME}</string>
+  <key>CFBundleIconFile</key><string>${APP_NAME}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
@@ -181,6 +216,7 @@ if (!build) {
   process.exit(1);
 }
 
+assertSeaRuntime();
 fs.mkdirSync(DIST_DIR, { recursive: true });
 const output = build();
 console.log(`\nHazir: ${output}`);

@@ -1,5 +1,21 @@
 # Değişiklik Geçmişi
 
+## Yayımlanmamış
+
+Kapsamlı kod incelemesinde bulunan hatalar ve iyileştirmeler:
+
+- **macOS'ta Chrome yoksa** (Safari vb.) panel varsayılan tarayıcıda açıldıktan sonra sunucu süreci sekme kapatılınca da arka planda sonsuza kadar çalışıyordu ve uygulama bir daha açılamıyordu. Artık sayfa kapanınca (ya da birkaç dakika hiçbir sayfa açık değilse) sunucu kendini kapatıyor.
+- **macOS'ta önceki oturumdan kalan Chrome** süreci, yeni açılan sunucunun hemen kapanmasına (pencerenin "bağlantı reddedildi" göstermesine) yol açıyordu. Artık açılışta bu artık süreç kapatılıyor, tarayıcı isteği başka bir sürece devrederse sunucu kapanmıyor.
+- Birden fazla panel penceresi açıkken biri kapatılınca diğeri de kapanıyordu; artık son pencere kapanınca kapanıyor.
+- **Güvenlik:** yerel sunucu artık yalnızca `127.0.0.1`/`localhost` adresli ve aynı kaynaktan gelen istekleri kabul ediyor (DNS rebinding ve başka sitelerin paneli kapatması/API'ye istek attırması engellendi). Sayfaya Content-Security-Policy ve çerçeveleme koruması eklendi; kartlar `innerHTML` yerine DOM ile oluşturuluyor.
+- Varsayılan port başka bir uygulama tarafından kullanılıyorsa artık o uygulamaya pencere açılmıyor, sonraki portlar deneniyor. Geçersiz `PORT` değeri çökme yerine uyarıyla varsayılana dönüyor.
+- Yenileme aralığı 20 sn'den 60 sn'ye çıkarıldı; pencere gizliyken sorgu yapılmıyor, bir limit sıfırlandığı anda ayrıca yenileniyor. "Şimdi yenile"ye art arda basmak artık aynı anda birden fazla istek göndermiyor; sunucu da kısa süreli önbellekle aynı anda gelen istekleri tek API çağrısında birleştiriyor.
+- macOS'ta Keychain her sorguda değil, 10 dakikada bir (veya jeton geçersizleşince) okunuyor. Süresi geçmiş jetonla API'ye istek atılmıyor; 401 alınınca Claude Code'un yenilediği jeton bir kez daha deneniyor.
+- Geçersiz tarih ("Invalid Date", "NaNdk sonra"), JSON olmayan sunucu/API cevapları ve hiç veri yokken gösterilen "son bilinen veriler" metni düzeltildi. "son güncelleme" süresi dakika/saat olarak gösteriliyor.
+- `CLAUDE_CONFIG_DIR` ortam değişkeni artık masaüstü panelde de dikkate alınıyor: jeton okuma ve API mantığı VS Code eklentisiyle ortak (`vscode-extension/src/usage.js`).
+- Build artık Node 20.12'den eski sürümleri reddediyor: bu sürümlerde build "başarılı" görünüp uygulama açılışta çöküyordu (`node:sea` modülü yok). Gereken Node sürümü `>=20.12` olarak güncellendi.
+- Build: `postject` sürümü sabitlendi, macOS uygulamasına ikon eklendi. Sunucu testleri (`npm test`), GitHub Actions CI ve kök dizine LICENSE eklendi.
+
 ## v1.1.0 - 2026-09-29
 
 macOS desteği ve güvenlik/sağlamlık düzeltmeleri:

@@ -3,6 +3,8 @@
   "output": "sea-prep.blob",
   "disableExperimentalSEAWarning": true,
   "assets": {
-    "index.html": "index.html"
+    "index.html": "index.html",
+    "usage.js": "vscode-extension/src/usage.js",
+    "package.json": "package.json"
   }
 }

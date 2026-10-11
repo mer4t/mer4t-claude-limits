@@ -8,14 +8,14 @@ See your **Claude Code usage limits** — the 5-hour session limit and the weekl
 
 ## Requirements
 
-You must have signed in to **Claude Code** on this machine at least once. The extension reads the same session token Claude Code uses:
+VS Code 1.82 or newer. You must have signed in to **Claude Code** on this machine at least once. The extension reads the same session token Claude Code uses:
 
 | OS | Where the token is read from |
 |---|---|
 | macOS | Keychain item `Claude Code-credentials` (falls back to `~/.claude/.credentials.json`) |
 | Windows / Linux | `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`) |
 
-On macOS, the first read shows a Keychain permission prompt. Choose **Always Allow** so it does not ask again.
+On macOS, the first read shows a Keychain permission prompt. Choose **Always Allow** so it does not ask again. The Keychain is read at most every 10 minutes, or sooner when the token stops working.
 
 ## Privacy
 
