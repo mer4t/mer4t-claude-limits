@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check server.js && node --check build.js
+      - run: npm test
+
+  # Her platform kendi ciktisini kendisi uretir (capraz derleme yok). setup-node
+  # nodejs.org'daki resmi (SEA destekli, statik bagli) node'u kurar.
+  build:
+    needs: test
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeLimits-${{ runner.os }}
+          path: |
+            dist/ClaudeLimits.exe
+            dist/ClaudeLimits.app
+          if-no-files-found: error
